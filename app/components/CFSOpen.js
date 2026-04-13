@@ -657,9 +657,47 @@ function SharedView({ data }) {
 }
 
 // ── Leaderboard ──────────────────────────────────────────────────
+function WorkoutDrawer({ workout, onClose }) {
+  const icons = { reps: "🔄", time: "⏱️", weight: "🏋️", distance: "📏" };
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, cursor: "pointer" }} />
+      <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(400px, 90vw)", background: T.surface, borderLeft: `1px solid ${T.border2}`, zIndex: 1001, display: "flex", flexDirection: "column", animation: "slideIn .2s ease-out" }}>
+        <style>{`@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: `1px solid ${T.border}` }}>
+          <span style={{ fontWeight: 700, fontSize: 16, color: T.text }}>{workout.name} {workout.isFinals ? "★" : ""}</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: T.textMuted, fontSize: 20, cursor: "pointer", padding: "4px 8px" }}>✕</button>
+        </div>
+        <div style={{ padding: 20, overflowY: "auto", flex: 1 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+            <span style={{ background: T.surface3, padding: "4px 10px", borderRadius: 4, fontSize: 12, color: T.textMuted }}>{icons[workout.type] || "📋"} {workout.type}</span>
+            {workout.timeCap > 0 && <span style={{ background: T.surface3, padding: "4px 10px", borderRadius: 4, fontSize: 12, color: T.textMuted }}>⏱️ Cap: {formatTime(workout.timeCap)}</span>}
+            {workout.hasTiebreak && <span style={{ background: T.surface3, padding: "4px 10px", borderRadius: 4, fontSize: 12, color: T.textMuted }}>Tiebreak</span>}
+            {workout.isFinals && <span style={{ background: "rgba(251,191,36,0.15)", padding: "4px 10px", borderRadius: 4, fontSize: 12, color: T.yellow }}>Finals</span>}
+          </div>
+          {workout.description ? (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>Description</div>
+              <div style={{ fontSize: 14, color: T.text, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{workout.description}</div>
+            </div>
+          ) : (
+            <div style={{ color: T.textDim, fontSize: 13, fontStyle: "italic" }}>No description added.</div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 function Leaderboard({ data, readOnly }) {
   const { athletes, workouts, scores, divisions } = data;
   const [copied, setCopied] = useState(false);
+  const [drawerWod, setDrawerWod] = useState(null);
 
   const handleShare = () => {
     const encoded = encodeShare({ ...data, _sharedAt: new Date().toISOString() });
@@ -765,8 +803,8 @@ function Leaderboard({ data, readOnly }) {
                       <th rowSpan={2} style={{ ...thS, minWidth: 150, position: "sticky", left: 44, zIndex: 2, background: T.surface2 }}>Athlete</th>
                       {workouts.map((w, wi) => (
                         <React.Fragment key={w.id}>
-                          <th colSpan={w.hasTiebreak ? 3 : 2} style={{ ...thS, textAlign: "center", borderLeft: `1px solid ${T.border}`, color: w.isFinals ? T.yellow : T.textMuted }}>
-                            {w.name} {w.isFinals && "★"}
+                          <th colSpan={w.hasTiebreak ? 3 : 2} style={{ ...thS, textAlign: "center", borderLeft: `1px solid ${T.border}`, color: w.isFinals ? T.yellow : T.textMuted, cursor: "pointer" }} onClick={() => setDrawerWod(w)}>
+                            <span style={{ borderBottom: `1px dashed currentColor`, paddingBottom: 1 }}>{w.name} {w.isFinals && "★"}</span>
                           </th>
                           {showRunningAfter.includes(wi) && (
                             <th rowSpan={2} style={{ ...thS, textAlign: "center", borderLeft: `2px solid ${colors.bg}`, fontWeight: 800, color: colors.text, width: 50, fontSize: 10, background: T.surface2 }}>Total</th>
@@ -827,6 +865,7 @@ function Leaderboard({ data, readOnly }) {
           </div>
         );
       })}
+      {drawerWod && <WorkoutDrawer workout={drawerWod} onClose={() => setDrawerWod(null)} />}
     </div>
   );
 }
@@ -859,11 +898,11 @@ function Scoring({ data, save }) {
   const doSave = (aid, val, tb, status = "complete") => {
     const parsed = wod?.type === "time" ? parseTimeInput(val) : Number(val);
     if (parsed === null || parsed === undefined || (typeof parsed === "number" && isNaN(parsed))) { setEd(null); return; }
-    save({ ...data, scores: { ...data.scores, [`${aid}_${selW}`]: { value: parsed, status, tiebreak: tb ? parseTimeInput(tb) : null, timestamp: new Date().toISOString() } } });
+    save({ ...data, scores: { ...data.scores, [`${aid}_${selW}`]: { value: parsed, status, tiebreak: tb ? parseTimeInput(tb) : null, timestamp: Date.now() } } });
     setEd(null);
   };
-  const doDNF = (aid) => save({ ...data, scores: { ...data.scores, [`${aid}_${selW}`]: { value: 0, status: "dnf", tiebreak: null, timestamp: new Date().toISOString() } } });
-  const doCAP = (aid) => { const r = prompt("Reps at cap:"); if (r) save({ ...data, scores: { ...data.scores, [`${aid}_${selW}`]: { value: Number(r), status: "cap", tiebreak: null, timestamp: new Date().toISOString() } } }); };
+  const doDNF = (aid) => save({ ...data, scores: { ...data.scores, [`${aid}_${selW}`]: { value: 0, status: "dnf", tiebreak: null, timestamp: Date.now() } } });
+  const doCAP = (aid) => { const r = prompt("Reps at cap:"); if (r) save({ ...data, scores: { ...data.scores, [`${aid}_${selW}`]: { value: Number(r), status: "cap", tiebreak: null, timestamp: Date.now() } } }); };
   const doClear = (aid) => { const ns = { ...data.scores }; delete ns[`${aid}_${selW}`]; save({ ...data, scores: ns }); };
 
   if (!data.workouts.length || !data.athletes.length) return <EmptyState icon="📝" title="Setup required" sub="Add athletes and workouts first." />;
